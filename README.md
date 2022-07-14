@@ -16,6 +16,7 @@ POST request format should be
     "to": "2021-01-31T00:00:00Z"
 }
 ```
+
 - "**from**" and "**to**" fields are strings, with date and time in ISO 8601 format (JavaScript compatible).
 - You probably won't need time component, but regardless, input requirement is still full ISO8601 timestamp. All other date formats should fail validation, and throw relevant error message. The same goes for missing fields or other validation errors. 
 - POST method for getting data may seem strange, but let's just assume that it makes sense from global perspective.
@@ -29,6 +30,7 @@ It should be a JSON, with format:
     "avg": 12345.67 
 }
 ```
+
 - In the example above, **"from"** is not equal to requested **"from"**! That's because NBP don't track gold prices at weekends. Respond with real data!
 - Response timezone should always be current Polish timezone (Europe/Warsaw). At the time of writing, this is +02:00.
 - **avg** field type is _float_, but keep in mind that it means _money_, not just any float.
