@@ -15,9 +15,9 @@ class GoldController extends AbstractController
         // Replace this placeholder with real code
 
         return $this->json([
-            'from' => '2001-01-04T00:00:00+00:00',
-            'to' => '2001-01-04T00:00:00+00:00',
-            'avg' => 228.1
+            "from" => "2021-01-04T00:00:00+02:00",
+            "to" => "2021-01-29T00:00:00+02:00",
+            "avg" => 12345.67
         ]);
     }
 }
