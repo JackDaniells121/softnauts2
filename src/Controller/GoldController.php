@@ -5,8 +5,13 @@ namespace App\Controller;
 use App\Entity\NBPGoldPrice;
 use App\Repository\NBPGoldPriceRepository;
 use App\Service\NBPApiClient;
+use DateInterval;
+use DatePeriod;
 use DateTime;
 use DateTimeZone;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Criteria;
+use Doctrine\Common\Collections\Expr\Comparison;
 use Doctrine\ORM\Tools\Pagination\Paginator;
 use Doctrine\Persistence\ManagerRegistry;
 use Doctrine\Persistence\ObjectManager;
@@ -25,23 +30,29 @@ class GoldController extends AbstractController
     private int $sum = 0;
     private int $daysRangeNumber = 0;
 
+    public function __construct(
+        private NBPApiClient $apiClient,
+        private ManagerRegistry $doctrine
+    )
+    {
+        $this->entityManager = $this->doctrine->getManager();
+    }
+
     #[Route('/api/gold', name: 'app_gold')]
-    public function index(Request $request, NBPApiClient $apiClient, ManagerRegistry $doctrine): JsonResponse
+    public function index(Request $request): JsonResponse
     {
         $valid = $this->validateRequest($request);
 
-        $cache = new NBPGoldPriceRepository($doctrine);
-        $collection = $cache->findDateInRange($valid['from'], $valid['to']);
+        $missingDaysGroups = $this->getMissingDatesGroups($valid['from'], $valid['to']);
 
-        if (!$collection) {
-            $this->entityManager = $doctrine->getManager();
-            $results = $apiClient->fetchPrices($valid['from'], $valid['to']);
-
-            foreach ($results as $result) {
-                $collection[] = $this->saveGoldPrice($result);
+        foreach ($missingDaysGroups as $group) {
+            if ($this->isWeekend($group) == false) {
+                $this->fetchAndSave($group[0], end($group));
             }
-            $this->entityManager->flush();
         }
+
+        $cache = new NBPGoldPriceRepository($this->doctrine);
+        $collection = $cache->findDateInRange($valid['from'], $valid['to']);
 
         foreach ($collection as $goldPrice) {
             $this->sum += $goldPrice->getPrice();
@@ -74,10 +85,17 @@ class GoldController extends AbstractController
         $to = $request->get('to');
         $this->reqDateTo = $this->validateDate($to);
 
+        $from = date('Y-m-d', strtotime($from));
+        $to = date('Y-m-d', strtotime($to));
+
+        if($to < $from){
+             throw new \Exception('Invalid date range. \'to\' > \'from\'');
+        }
+
         if ($from && $to) {
             return [
-                'from' => date('Y-m-d', strtotime($from)),
-                'to' => date('Y-m-d', strtotime($to))
+                'from' => $from,
+                'to' => $to
             ];
         }
     }
@@ -107,4 +125,63 @@ class GoldController extends AbstractController
         return $calc2;
     }
 
+    public function getMissingDatesGroups($from, $to)
+    {
+        $repo = new NBPGoldPriceRepository($this->doctrine);
+        $array = $repo->findDateInRange($from, $to);
+        $cache = [];
+
+        foreach ($array as $goldPrice) {
+            $date = $goldPrice->getDate()->format('Y-m-d');
+            $cache[$date] = $goldPrice->getPrice();
+        }
+
+        // need to extend range by +1 to end to proper function below foreach
+        $toExt = date('Y-m-d', strtotime($to . '+1 day'));
+
+        $period = new DatePeriod(
+            new DateTime($from),
+            new DateInterval('P1D'),
+            new DateTime($toExt)
+        );
+
+        $missingDays = [];
+        $groups = 0;
+        $lastDate = $from;
+
+        foreach ($period as $key => $value) {
+            $date = $value->format('Y-m-d') ;
+
+            if (!array_key_exists($date, $cache)) {
+
+                $next = date('Y-m-d', strtotime($lastDate . '+1 day'));
+
+                if ($next != $date){
+                    $groups++;
+                }
+
+                $missingDays[$groups][] = $date;
+                $lastDate = $date;
+            }
+        }
+
+        return $missingDays;
+    }
+
+    public function fetchAndSave($from, $to)
+    {
+        $collection = [];
+        $results = $this->apiClient->fetchPrices($from, $to);
+
+        foreach ($results as $result) {
+            $collection[] = $this->saveGoldPrice($result);
+        }
+        $this->entityManager->flush();
+//        return $collection;
+    }
+
+    public function isWeekend($group): bool
+    {
+        return count($group) == 2 && (date("w", strtotime($group[0])) == 6);
+    }
 }
