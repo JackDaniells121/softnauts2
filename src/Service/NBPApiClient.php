@@ -9,11 +9,9 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
 class NBPApiClient
 {
     private $client;
-    private $nbpUrl = 'http://api.nbp.pl/api/cenyzlota';
 
     public function __construct() {
-        $client = HttpClient::create();
-        $this->client = $client;
+        $this->client = HttpClient::create();
     }
 
     public function fetchPrices(string $date1, string $date2)
@@ -29,6 +27,7 @@ class NBPApiClient
             $this->generateErrorResponse();
             return false;
         }
+
         $contentType = $response->getHeaders()['content-type'][0];
         $content = $response->getContent();
         $content = $response->toArray();
